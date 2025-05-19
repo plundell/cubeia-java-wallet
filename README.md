@@ -6,17 +6,6 @@ This Java 21 Sprint Boot REST API allows a user or system to:
 - List transactions
 - Transfer "money" to other wallets
 
-**Design Features:** 
-- Stateless 
-- Horizontally scaleable 
-
-**API Endpoints:**
-| Method | URL                        | Description                           |
-|--------|----------------------------|---------------------------------------|
-| PUT    | /api/wallet                | Create a new wallet                   |
-| GET    | /api/balance     	      | Get the current balance of a wallet   |
-| GET    | /api/transactions          | List all transactions for wallet      |
-| POST   | /api/transfer          	  | Transfer money to another wallet	  |
 
 
 
@@ -25,7 +14,7 @@ This Java 21 Sprint Boot REST API allows a user or system to:
 To develop or test this application locally you should download the sources from github, then build using Maven 3.8+ and run using a Java 21 Runtime Enviornment
 
 ```bash
-git clone https://github.com/your-username/demo-api.git
+git clone https://github.com/plundell/demo-api.git
 cd demo-api
 # make andy changes you like in the source code files...
 mvn test
