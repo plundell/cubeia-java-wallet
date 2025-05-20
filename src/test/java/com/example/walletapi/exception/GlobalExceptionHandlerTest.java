@@ -11,10 +11,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -53,7 +55,7 @@ public class GlobalExceptionHandlerTest {
 	static class TestController {
 		@GetMapping("/test/unauthorized")
 		public String throwUnauthorized() {
-			throw new UnauthorizedException("Test unauthorized exception");
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Test unauthorized exception");
 		}
 
 		@GetMapping("/test/runtime-exception")

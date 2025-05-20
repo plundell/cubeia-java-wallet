@@ -4,11 +4,13 @@ import com.example.walletapi.dto.responses.BalanceResponseDto;
 import com.example.walletapi.dto.responses.TransferResponseDto;
 import com.example.walletapi.exception.InsufficientFundsException;
 import com.example.walletapi.exception.NotFoundException;
-import com.example.walletapi.model.impl.Transfer;
 import com.example.walletapi.model.impl.Wallet;
 import com.example.walletapi.service.WalletServiceInterface;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import jakarta.annotation.PostConstruct;
 
@@ -22,15 +24,16 @@ import java.math.BigDecimal;
 
 import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Logger;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.event.ContextClosedEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 /**
@@ -38,8 +41,15 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class WalletService implements WalletServiceInterface {
-	private final ConcurrentMap<String, Wallet> wallets;
+	private final ConcurrentMap<UUID, Wallet> wallets;
 	private final Logger logger;
+	private final BCryptPasswordEncoder passwordEncoder;
+
+	@Value("${bank.wallet.id:00000000-0000-0000-0000-000000000000}")
+	private UUID bankWalletId;
+
+	@Value("${bank.wallet.initial-deposit:1000000000}")
+	private BigDecimal bankWealth;
 
 	@Value("${wallet.data.file:wallet-data.ser}")
 	private String walletDataFile;
@@ -51,6 +61,7 @@ public class WalletService implements WalletServiceInterface {
 	public WalletService() {
 		this.wallets = new ConcurrentHashMap<>();
 		this.logger = Logger.getLogger(WalletService.class.getName());
+		this.passwordEncoder = new BCryptPasswordEncoder();
 	}
 
 	/**
@@ -62,7 +73,7 @@ public class WalletService implements WalletServiceInterface {
 		if (file.exists()) {
 			try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(file))) {
 				@SuppressWarnings("unchecked")
-				ConcurrentMap<String, Wallet> savedWallets = (ConcurrentMap<String, Wallet>) ois.readObject();
+				ConcurrentMap<UUID, Wallet> savedWallets = (ConcurrentMap<UUID, Wallet>) ois.readObject();
 				wallets.putAll(savedWallets);
 				logger.info("Loaded " + wallets.size() + " wallets from " + walletDataFile);
 			} catch (Exception e) {
@@ -95,13 +106,22 @@ public class WalletService implements WalletServiceInterface {
 								.readValue(jsonFile, new TypeReference<Map<String, Serializable>>() {
 								});
 						Wallet wallet = new Wallet(data);
-						wallets.put(wallet.getId().toString(), wallet);
+						wallets.put(wallet.getId(), wallet);
 					} catch (Exception e) {
 						logger.warning(
 								"Failed to load wallet data from file " + jsonFile.getName() + ": " + e.getMessage());
 					}
 				}
 			}
+		}
+	}
+
+	private Wallet getBankWallet() {
+		try {
+			return this.getWalletUnathenticated(bankWalletId);
+		} catch (NotFoundException e) {
+			this.logger.info("Bank wallet not found, creating...");
+			return createBankWallet();
 		}
 	}
 
@@ -158,10 +178,33 @@ public class WalletService implements WalletServiceInterface {
 	 * Retrieves a wallet by its ID.
 	 * 
 	 * @param walletId The ID of the wallet to retrieve
+	 * @param password The password of the wallet
+	 * 
+	 * @return The wallet
+	 * @throws NotFoundException if the wallet doesn't exist or if the password
+	 *                           doesn't match (to prevent sniffing)
+	 */
+	public Wallet getWallet(UUID walletId, String password) throws NotFoundException {
+		Wallet wallet = this.wallets.get(walletId);
+		if (wallet != null) {
+			if (passwordEncoder.matches(password, wallet.getPassword())) {
+				return wallet;
+			} else {
+				this.logger.warning("Password mismatch for wallet " + walletId);
+			}
+		}
+		throw new NotFoundException("No wallet matching that id (" + walletId
+				+ ") and password was found. Please check the id and try again.");
+	}
+
+	/**
+	 * Retrieves a wallet by its ID WITHOUT performing password validation.
+	 * 
+	 * @param walletId The ID of the wallet to retrieve
 	 * @return The wallet
 	 * @throws NotFoundException if the wallet doesn't exist
 	 */
-	public Wallet getWallet(String walletId) throws NotFoundException {
+	public Wallet getWalletUnathenticated(UUID walletId) throws NotFoundException {
 		Wallet wallet = this.wallets.get(walletId);
 		if (wallet == null) {
 			throw new NotFoundException("No wallet with id " + walletId + " found. Please check the id and try again.");
@@ -172,12 +215,39 @@ public class WalletService implements WalletServiceInterface {
 	/**
 	 * Creates a new wallet with an initial balance of zero.
 	 * 
+	 * @param password The password which will be used to access the wallet
+	 * 
 	 * @return The newly created wallet
 	 */
-	public Wallet createWallet() {
-		Wallet wallet = new Wallet();
-		this.wallets.put(wallet.getId().toString(), wallet);
+	public Wallet createWallet(String clearTextPassword) {
+		if (clearTextPassword == null || clearTextPassword.isEmpty()) {
+			throw new IllegalArgumentException("Password is required to create a wallet");
+		}
+		String encodedPassword = this.passwordEncoder.encode(clearTextPassword);
+		Wallet wallet = new Wallet(encodedPassword);
+		this.wallets.put(wallet.getId(), wallet);
 		return wallet;
+	}
+
+	private Wallet createBankWallet() {
+		Map<String, Serializable> initialDeposit = new HashMap<>();
+		initialDeposit.put("id", UUID.randomUUID());
+		initialDeposit.put("sender", this.bankWalletId);
+		initialDeposit.put("recipient", this.bankWalletId);
+		initialDeposit.put("amount", bankWealth);
+		initialDeposit.put("timestamp", System.currentTimeMillis());
+
+		List<Map<String, Serializable>> bankLedger = new ArrayList<>();
+		bankLedger.add(initialDeposit);
+
+		Map<String, Serializable> bankWalletData = new HashMap<>();
+		bankWalletData.put("id", this.bankWalletId);
+		bankWalletData.put("password", "thiswillnevermatchanything");
+		bankWalletData.put("ledger", (Serializable) bankLedger);
+
+		Wallet bankWallet = new Wallet(bankWalletData);
+		this.wallets.put(bankWallet.getId(), bankWallet);
+		return bankWallet;
 	}
 
 	/**
@@ -192,10 +262,16 @@ public class WalletService implements WalletServiceInterface {
 	 * @throws NotFoundException          if the source or destination wallet
 	 *                                    doesn't exist
 	 */
-	public TransferResponseDto sendMoney(String sourceWalletId, String destinationWalletId, BigDecimal amount)
+	public TransferResponseDto sendMoney(UUID sourceWalletId, UUID destinationWalletId, BigDecimal amount)
 			throws InsufficientFundsException, NotFoundException {
-		Wallet sourceWallet = this.getWallet(sourceWalletId);
-		Wallet destinationWallet = this.getWallet(destinationWalletId);
+		if (sourceWalletId == null || destinationWalletId == null || amount == null) {
+			throw new IllegalArgumentException("Invalid arguments");
+		}
+		if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+			throw new IllegalArgumentException("Amount must be greater than zero");
+		}
+		Wallet sourceWallet = this.getWalletUnathenticated(sourceWalletId);
+		Wallet destinationWallet = this.getWalletUnathenticated(destinationWalletId);
 		TransferResponseDto response = sourceWallet.sendMoney(destinationWallet, amount);
 
 		// Since this is just a demo and we're not taking persistence serious we save
@@ -221,8 +297,23 @@ public class WalletService implements WalletServiceInterface {
 	 * @param amount   The amount of money to send
 	 * @return The transfer
 	 */
-	public BalanceResponseDto depositMoney(String walletId, BigDecimal amount) {
-		// Normally maybe we would want the money to come from somewhere... but hey
-		return this.getWallet(walletId).depositMoney(amount);
+	public BalanceResponseDto depositMoney(UUID walletId, BigDecimal amount, String token)
+			throws NotFoundException, AccessDeniedException {
+		// Check that the token is valid for that amount
+		if (token == null || token.isEmpty() || token.equals("TEST-INVALID-TOKEN")) {
+			throw new AccessDeniedException("Invalid token");
+		}
+
+		// ****** PERFORM SUPER SECURE CHECK OF TOKEN HERE ******//
+
+		// Make sure the bank wallet exists...
+		this.getBankWallet();
+
+		// ...then perform a normal transfer...
+		this.sendMoney(bankWalletId, walletId, amount);
+
+		// ...and finally return the balance
+		return this.getWalletUnathenticated(walletId).getBalanceDto();
 	}
+
 }

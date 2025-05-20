@@ -1,9 +1,7 @@
 package com.example.walletapi.security;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Assertions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import java.util.UUID;
 
@@ -11,13 +9,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
-import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.web.server.ResponseStatusException;
 
-import com.example.walletapi.dto.responses.WalletCreationResponseDto;
+import com.example.walletapi.dto.responses.WalletAccessResponseDto;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -30,8 +25,7 @@ public class SecurityConfigurationTest {
 
 	public MvcResult createWallet() throws Exception {
 		try {
-			return mockMvc.perform(post("/api/v1/wallet/create")
-					.with(SecurityMockMvcRequestPostProcessors.csrf()))
+			return mockMvc.perform(post("/api/wallet/v1/public/create"))
 					.andReturn();
 		} catch (Exception e) {
 			System.out.println("-----------------Got exception:\n" + e.getMessage() + "\n" + e.getStackTrace());
@@ -40,7 +34,7 @@ public class SecurityConfigurationTest {
 		}
 	}
 
-	public WalletCreationResponseDto getWalletCreationResponse() throws Exception {
+	public WalletAccessResponseDto getWalletCreationResponse() throws Exception {
 		MvcResult result = createWallet();
 		try {
 			String responseBody = result.getResponse().getContentAsString();
@@ -48,7 +42,7 @@ public class SecurityConfigurationTest {
 			JsonNode jsonNode = mapper.readTree(responseBody);
 			UUID walletId = UUID.fromString(jsonNode.get("walletId").asText());
 			String token = jsonNode.get("token").asText();
-			return new WalletCreationResponseDto(walletId, token);
+			return new WalletAccessResponseDto(walletId, token);
 		} catch (Exception e) {
 			throw new Exception(
 					"getWalletCreationResponse() failed to create a WalletCreationResponseDto() from the API response. See Debug Console.");
@@ -59,9 +53,10 @@ public class SecurityConfigurationTest {
 	public void testPublicEndpoints() {
 		// Test a public endpoint by creating a wallet
 		try {
-			MvcResult result = createWallet();
+			MvcResult result = mockMvc.perform(get("/api/wallet/v1/public/help"))
+					.andReturn();
 			int status = result.getResponse().getStatus();
-			Assertions.assertEquals(201, status);
+			Assertions.assertEquals(200, status);
 		} catch (Exception e) {
 			Assertions.fail(e.getMessage());
 
@@ -76,8 +71,7 @@ public class SecurityConfigurationTest {
 			// Test protected endpoints without providing any token, this should result in
 			// 401 unauthorized
 			MvcResult result;
-			result = mockMvc.perform(get("/api/v1/wallet/{walletId}/balance", walletId)
-					.with(SecurityMockMvcRequestPostProcessors.csrf()))
+			result = mockMvc.perform(get("/api/wallet/v1/balance", walletId))
 					.andReturn();
 			int status = result.getResponse().getStatus();
 			System.out.println("-----------------Got status: " + status);
@@ -98,9 +92,9 @@ public class SecurityConfigurationTest {
 	public void testProtectedEndpointsWithInvalidToken() {
 		try {
 
-			MvcResult result = mockMvc.perform(get("/api/v1/wallet/{walletId}/balance", "doesnt-matter")
+			MvcResult result = mockMvc.perform(get("/api/wallet/v1/balance", "doesnt-matter")
 					.header("Authorization", "Bearer thisisnotavalidtoken") // this matters
-					.with(SecurityMockMvcRequestPostProcessors.csrf()))
+			)
 					.andReturn();
 			int status = result.getResponse().getStatus();
 			System.out.println("-----------------Got status: " + status);
@@ -120,13 +114,12 @@ public class SecurityConfigurationTest {
 	@Test
 	public void testProtectedEndpointsWithTokenWalletMismatch() {
 		try {
-			WalletCreationResponseDto walletCreationResponseDto = getWalletCreationResponse();
+			WalletAccessResponseDto walletCreationResponseDto = getWalletCreationResponse();
 			String token = walletCreationResponseDto.getToken();
 			String wrongWalletId = UUID.randomUUID().toString();
 
-			MvcResult result = mockMvc.perform(get("/api/v1/wallet/{walletId}/balance", wrongWalletId)
-					.header("Authorization", "Bearer " + token)
-					.with(SecurityMockMvcRequestPostProcessors.csrf()))
+			MvcResult result = mockMvc.perform(get("/api/wallet/v1/balance", wrongWalletId)
+					.header("Authorization", "Bearer " + token))
 					.andReturn();
 			int status = result.getResponse().getStatus();
 			System.out.println("-----------------Got status: " + status);
@@ -143,13 +136,12 @@ public class SecurityConfigurationTest {
 	@Test
 	public void testProtectedEndpointsWithCorrectToken() {
 		try {
-			WalletCreationResponseDto walletCreationResponseDto = getWalletCreationResponse();
+			WalletAccessResponseDto walletCreationResponseDto = getWalletCreationResponse();
 			String token = walletCreationResponseDto.getToken();
-			String wrongWalletId = UUID.randomUUID().toString();
+			String walletId = walletCreationResponseDto.getWalletId().toString();
 
-			MvcResult result = mockMvc.perform(get("/api/v1/wallet/{walletId}/balance", wrongWalletId)
-					.header("Authorization", "Bearer " + token)
-					.with(SecurityMockMvcRequestPostProcessors.csrf()))
+			MvcResult result = mockMvc.perform(get("/api/wallet/v1/balance", walletId)
+					.header("Authorization", "Bearer " + token))
 					.andReturn();
 			int status = result.getResponse().getStatus();
 			System.out.println("-----------------Got status: " + status);
@@ -163,24 +155,24 @@ public class SecurityConfigurationTest {
 	}
 
 	/**
-	 * Test that protected endpoints respond with 403 when all is good but CSRF is
-	 * missing
+	 * Test that protected endpoints respond with 200 when no CSRF token is sent
+	 * (CSRF is disabled).
 	 */
 	@Test
-	public void testCsrfProtection() {
+	public void testProtectedEndpointsAccessibleWithoutCsrfToken() {
 		try {
-			WalletCreationResponseDto walletCreationResponseDto = getWalletCreationResponse();
+			WalletAccessResponseDto walletCreationResponseDto = getWalletCreationResponse();
 			String token = walletCreationResponseDto.getToken();
-			String wrongWalletId = UUID.randomUUID().toString();
+			String walletId = walletCreationResponseDto.getWalletId().toString();
 
-			MvcResult result = mockMvc.perform(get("/api/v1/wallet/{walletId}/balance", wrongWalletId)
+			MvcResult result = mockMvc.perform(get("/api/wallet/v1/balance", walletId)
 					.header("Authorization", "Bearer " + token))
 					.andReturn();
 
 			int status = result.getResponse().getStatus();
 			System.out.println("-----------------Got status: " + status);
 
-			Assertions.assertEquals(403, status);
+			Assertions.assertEquals(200, status);
 		} catch (Exception e) {
 			System.out.println("-----------------Got exception:\n" + e.getMessage() + "\n" + e.getStackTrace());
 			Assertions.fail(

@@ -37,6 +37,8 @@ public class Wallet implements WalletInterface {
 
 	private final UUID id;
 
+	private final String password;
+
 	private Logger logger;
 
 	/**
@@ -71,7 +73,12 @@ public class Wallet implements WalletInterface {
 	 */
 	public Wallet(Map<String, Serializable> data) throws IllegalArgumentException {
 		try {
-			this.id = (UUID) data.get("id");
+			this.id = UUID.fromString((String) data.get("id"));
+
+			this.password = (String) data.get("password");
+			if (this.password == null) {
+				throw new IllegalArgumentException("Password is required to create a wallet");
+			}
 
 			@SuppressWarnings("unchecked")
 			List<Map<String, Serializable>> ledgerMap = (List<Map<String, Serializable>>) data.get("ledger");
@@ -87,6 +94,7 @@ public class Wallet implements WalletInterface {
 				}
 			}
 			this.balance.set(_balance);
+
 		} catch (Exception e) {
 			throw new IllegalArgumentException("Invalid wallet data: " + e.getMessage());
 		}
@@ -94,9 +102,16 @@ public class Wallet implements WalletInterface {
 
 	/**
 	 * Constructs a new wallet with a random ID and zero balance.
+	 * 
+	 * @param password The password of the wallet.
+	 * @throws IllegalArgumentException if the password is null or empty.
 	 */
-	public Wallet() {
+	public Wallet(String password) {
 		this.id = UUID.randomUUID();
+		if (password == null || password.isEmpty()) {
+			throw new IllegalArgumentException("Password is required to create a wallet");
+		}
+		this.password = password;
 	}
 
 	private Logger getLogger() {
@@ -111,6 +126,13 @@ public class Wallet implements WalletInterface {
 	 */
 	public UUID getId() {
 		return this.id;
+	}
+
+	/**
+	 * Gets the password of the wallet.
+	 */
+	public String getPassword() {
+		return this.password;
 	}
 
 	/**
@@ -280,9 +302,4 @@ public class Wallet implements WalletInterface {
 
 	}
 
-	public BalanceResponseDto depositMoney(BigDecimal amount) {
-		TransferInterface transfer = transferFactory.fromDepositRequest(this.id, amount);
-		this.receiveMoney(transfer);
-		return this.getBalanceDto();
-	}
 }

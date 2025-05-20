@@ -51,7 +51,7 @@ public class JwtUtilTest {
 
 		// Assert
 		assertNotNull(jwt);
-		assertEquals(walletId, jwt.getStringClaim("walletId"));
+		assertEquals(walletId, jwt.get("walletId", String.class));
 		assertFalse(jwt.isExpired());
 	}
 

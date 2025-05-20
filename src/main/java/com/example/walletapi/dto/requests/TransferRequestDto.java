@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
+import java.util.UUID;
 
 /**
  * DTO request to send money to another wallet
@@ -11,7 +12,7 @@ import java.math.BigDecimal;
 public class TransferRequestDto {
 
 	@NotBlank(message = "Destination wallet ID is required")
-	private String destinationWalletId;
+	private UUID destinationWalletId;
 
 	@NotNull(message = "Transfer amount is required")
 	@Positive(message = "Transfer amount must be positive")
@@ -21,15 +22,23 @@ public class TransferRequestDto {
 	}
 
 	public TransferRequestDto(String destinationWalletId, BigDecimal amount) {
+		this(UUID.fromString(destinationWalletId), amount);
+	}
+
+	public TransferRequestDto(UUID destinationWalletId, BigDecimal amount) {
 		this.destinationWalletId = destinationWalletId;
 		this.amount = amount;
 	}
 
-	public String getDestinationWalletId() {
+	public UUID getDestinationWalletId() {
 		return destinationWalletId;
 	}
 
 	public void setDestinationWalletId(String destinationWalletId) {
+		this.setDestinationWalletId(UUID.fromString(destinationWalletId));
+	}
+
+	public void setDestinationWalletId(UUID destinationWalletId) {
 		this.destinationWalletId = destinationWalletId;
 	}
 

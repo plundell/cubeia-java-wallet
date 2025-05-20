@@ -14,11 +14,15 @@ public class DepositRequestDto {
 	@Positive(message = "Deposit amount must be positive")
 	private BigDecimal amount;
 
+	@NotBlank(message = "Deposit token is required")
+	private String token;
+
 	public DepositRequestDto() {
 	}
 
-	public DepositRequestDto(BigDecimal amount) {
+	public DepositRequestDto(BigDecimal amount, String token) {
 		this.amount = amount;
+		this.token = token;
 	}
 
 	public BigDecimal getAmount() {
@@ -28,4 +32,13 @@ public class DepositRequestDto {
 	public void setAmount(BigDecimal amount) {
 		this.amount = amount;
 	}
+
+	public String getToken() {
+		return token;
+	}
+
+	public void setToken(String token) {
+		this.token = token;
+	}
+
 }

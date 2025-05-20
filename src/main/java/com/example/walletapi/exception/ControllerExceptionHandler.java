@@ -14,13 +14,19 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 /**
  * Handles exceptions thrown by controllers or after controllers. For errors
- * thrown before that
- * see {@link FilterChainExceptionHandler}.
+ * thrown before that see {@link FilterChainExceptionHandler}.
  */
 @ControllerAdvice
 public class ControllerExceptionHandler extends ResponseEntityExceptionHandler {
 
-	private final Logger logger = Logger.getLogger(ControllerExceptionHandler.class.getName());
+	private Logger logger;
+
+	private Logger getLogger() {
+		if (logger == null) {
+			logger = Logger.getLogger(ControllerExceptionHandler.class.getName());
+		}
+		return logger;
+	}
 
 	// Handle all ResponseStatusException (our custom exceptions extend this)
 	@ExceptionHandler(ResponseStatusException.class)
@@ -44,7 +50,7 @@ public class ControllerExceptionHandler extends ResponseEntityExceptionHandler {
 				HttpStatus.INTERNAL_SERVER_ERROR.value(),
 				ex.getMessage(),
 				request.getDescription(false).replace("uri=", ""));
-		logger.severe("Uncaught exception. Replacing with a '500 Internal Server Error'. " + ex.getMessage());
+		getLogger().severe("Uncaught exception. Replacing with a '500 Internal Server Error'. " + ex.getMessage());
 		return new ResponseEntity<>(body, HttpStatus.INTERNAL_SERVER_ERROR);
 	}
 

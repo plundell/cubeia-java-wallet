@@ -65,11 +65,4 @@ public interface WalletInterface extends Serializable {
 	 */
 	void receiveMoney(TransferInterface transfer);
 
-	/**
-	 * Just put money in your wallet... because why not?!
-	 * 
-	 * @param amount The amount to deposit.
-	 * @return The new balance.
-	 */
-	BalanceResponseDto depositMoney(BigDecimal amount);
 }

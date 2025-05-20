@@ -45,3 +45,6 @@ logs/
 Thumbs.db 
 
 .test_data/
+*.pdf
+*.html
+*.code-workspace
