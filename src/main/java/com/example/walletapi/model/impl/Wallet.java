@@ -9,6 +9,7 @@ import com.example.walletapi.exception.ServerErrorException;
 import com.example.walletapi.model.TransferInterface;
 import com.example.walletapi.model.TransferInterface.TransferFactoryInterface;
 import com.example.walletapi.model.WalletInterface;
+import com.example.walletapi.util.CastUtil;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -302,23 +303,24 @@ public class Wallet implements WalletInterface {
 		@Override
 		public WalletInterface fromMap(Map<String, Serializable> data) {
 			try {
-				UUID id = UUID.fromString((String) data.get("id")); // throws on bad format or missing
-				this.logger.info("Creating wallet from map with ID: " + id);
 
-				String password = (String) data.get("password");
-				if (password == null || password.isEmpty()) {
+				UUID id = CastUtil.cast(data.get("id"), UUID.class);
+
+				String password = CastUtil.cast(data.get("password"), String.class);
+				if (password.isEmpty()) {
 					throw new IllegalArgumentException("Password is required to create a wallet");
 				}
 
 				Iterator<TransferInterface> ledger = this.transferFactory.getTransferIterator(data.get("ledger"));
 				// ^only throws if the key ledger exists but is not a list. may return null.
 
+				this.logger.info("Creating wallet from map with ID: " + id.toString());
 				return new Wallet(this.transferFactory, id, password, ledger);
 
 			} catch (IllegalArgumentException e) {
 				throw e;
 			} catch (Exception e) {
-				throw new IllegalArgumentException("Invalid wallet data: " + e.getMessage(), e);
+				throw new IllegalArgumentException("Invalid wallet data, cannot create wallet: " + e.getMessage(), e);
 			}
 		}
 

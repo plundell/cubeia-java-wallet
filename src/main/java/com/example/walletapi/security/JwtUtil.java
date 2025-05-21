@@ -9,7 +9,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -18,6 +17,7 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.example.walletapi.util.CastUtil;
 import java.security.Key;
 import java.util.Collections;
 import java.util.Date;
@@ -46,27 +46,6 @@ public class JwtUtil {
 	}
 
 	private Logger logger = LoggerFactory.getLogger(this.getClass());
-
-	protected static <T> T cast(Object value, Class<T> type) throws ClassCastException {
-		try {
-			if (type == UUID.class) {
-				return type.cast(UUID.fromString(value.toString()));
-			} else if (type == Integer.class) {
-				return type.cast(Integer.parseInt(value.toString()));
-			} else if (type == Long.class) {
-				return type.cast(Long.parseLong(value.toString()));
-			} else if (type == Double.class) {
-				return type.cast(Double.parseDouble(value.toString()));
-			} else if (type == Boolean.class) {
-				return type.cast(Boolean.parseBoolean(value.toString()));
-			} else {
-				return type.cast(value);
-			}
-		} catch (Exception e) {
-			throw new ClassCastException(
-					"Value " + value + " could not be cast to " + type.getName());
-		}
-	}
 
 	/**
 	 * Generates a JWT token with a single claim "id".
@@ -128,7 +107,7 @@ public class JwtUtil {
 				throw new IllegalArgumentException("Key not found: " + key);
 			} else {
 				try {
-					return cast(this.claims.get(key), type);
+					return CastUtil.cast(this.claims.get(key), type);
 				} catch (ClassCastException e) {
 					throw new ClassCastException(
 							"Key " + key + " existed on JWT, but could not be cast to " + type.getName());
@@ -171,7 +150,7 @@ public class JwtUtil {
 		if (user == null) {
 			return null;
 		} else {
-			return cast(user, type);
+			return CastUtil.cast(user, type);
 		}
 	}
 

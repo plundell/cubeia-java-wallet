@@ -107,4 +107,5 @@ public class WalletControllerPublic {
 		String token = jwtUtil.generateToken(walletId.toString());
 		return new WalletAccessResponseDto(walletId, token);
 	}
+
 }
