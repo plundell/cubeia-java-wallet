@@ -134,7 +134,8 @@ public class Wallet implements WalletInterface {
 	 */
 	public BalanceResponseDto getBalanceDto() throws ResourceConflictException {
 
-		long timeout = System.currentTimeMillis() + this.maxConcurrentRetriesTimeout;
+		// long timeout = System.currentTimeMillis() + this.maxConcurrentRetriesTimeout;
+		long timeout = System.currentTimeMillis() + 1000;
 		long timestamp;
 		BigDecimal _balance;
 		while (System.currentTimeMillis() < timeout) {
@@ -164,7 +165,8 @@ public class Wallet implements WalletInterface {
 	 */
 	public LedgerResponseDto getLedgerDto() throws ResourceConflictException {
 		// Don't run for longer than the timeout...
-		long timeout = System.currentTimeMillis() + this.maxConcurrentRetriesTimeout;
+		// long timeout = System.currentTimeMillis() + this.maxConcurrentRetriesTimeout;
+		long timeout = System.currentTimeMillis() + 1000;
 		while (System.currentTimeMillis() < timeout) {
 			int len = this.ledger.size();
 			long timestamp = System.currentTimeMillis();
@@ -209,7 +211,8 @@ public class Wallet implements WalletInterface {
 		// until we timeout, or run out of money, or succeed
 		BigDecimal _balance;
 		BigDecimal _remainingBalance;
-		long timeout = System.currentTimeMillis() + this.maxConcurrentRetriesTimeout;
+		// long timeout = System.currentTimeMillis() + this.maxConcurrentRetriesTimeout;
+		long timeout = System.currentTimeMillis() + 1000;
 		while (true) {
 			if (System.currentTimeMillis() > timeout) {
 				throw new ResourceConflictException(
