@@ -63,7 +63,7 @@ public class WalletService implements WalletServiceInterface {
 		this.walletFactory = walletFactory;
 	}
 
-	@PostConstruct
+	// @PostConstruct //trying to load wallets on request instead
 	public void loadWalletDataFromJsonFiles() {
 		File dataDir = new File(walletDataDir);
 		if (!dataDir.exists()) {
@@ -94,6 +94,41 @@ public class WalletService implements WalletServiceInterface {
 		}
 	}
 
+	private String getWalletDataFilePath(UUID walletId) {
+		return walletDataDir + "/" + walletId.toString() + ".json";
+	}
+
+	/**
+	 * Loads a wallet from a JSON file, stores it in the wallets map and returns it.
+	 * 
+	 * @param walletId The ID of the wallet to load
+	 * @return The wallet
+	 * @throws NotFoundException if the wallet file doesn't exist OR if the file has
+	 *                           a bad format
+	 */
+	private WalletInterface loadWalletFromJsonFile(UUID walletId) throws NotFoundException {
+		File jsonFile = new File(getWalletDataFilePath(walletId));
+		if (!jsonFile.exists()) {
+			throw new NotFoundException("No wallet file found at: " + jsonFile.getAbsolutePath());
+		}
+		try {
+			logger.info("Loading wallet data from file " + jsonFile.getName());
+			Map<String, Serializable> data = new ObjectMapper()
+					.readValue(jsonFile, new TypeReference<Map<String, Serializable>>() {
+					});
+			WalletInterface wallet = this.walletFactory.fromMap(data);
+			if (!wallet.getId().equals(walletId)) {
+				throw new NotFoundException("Wallet ID in filename and in file data didn't match:" +
+						"filename: " + walletId + ", file data: " + wallet.getId());
+			}
+			this.wallets.put(wallet.getId(), wallet);
+			return wallet;
+		} catch (Exception e) {
+			logger.warn("Failed to load wallet data from file " + jsonFile.getName(), e);
+			throw new NotFoundException("Failed to load wallet data from file " + jsonFile.getName());
+		}
+	}
+
 	private WalletInterface getBankWallet() {
 		try {
 			return this.getWalletUnathenticated(bankWalletId);
@@ -121,9 +156,8 @@ public class WalletService implements WalletServiceInterface {
 	 * Saves all wallets' data to individual JSON files.
 	 */
 	public void saveWalletDataToJsonFiles() {
-		ObjectMapper objectMapper = new ObjectMapper();
 		for (WalletInterface wallet : this.wallets.values()) {
-			saveWalletDataToJsonFile(wallet, objectMapper);
+			saveWalletDataToJsonFile(wallet);
 		}
 	}
 
@@ -134,21 +168,19 @@ public class WalletService implements WalletServiceInterface {
 	 * @param objectMapper The ObjectMapper to use
 	 * @return True if the save was successful, false otherwise
 	 */
-	public boolean saveWalletDataToJsonFile(WalletInterface wallet, ObjectMapper objectMapper) {
-		String filename = walletDataDir + "/????.json";
-		try {
-			filename = walletDataDir + "/" + wallet.getId().toString() + ".json";
-			File jsonFile = new File(filename);
-			if (objectMapper == null) {
-				objectMapper = new ObjectMapper();
+	public void saveWalletDataToJsonFile(WalletInterface wallet) {
+		CompletableFuture.runAsync(() -> {
+			String filename = walletDataDir + "/????.json"; // so we have something to log
+			try {
+				filename = getWalletDataFilePath(wallet.getId());
+				File jsonFile = new File(filename);
+				new ObjectMapper().writeValue(jsonFile, wallet);
+				// FIXME: Seems this writes a JSON object without the closing }
+				logger.info("ASYNC: Saved wallet data to " + filename);
+			} catch (Exception e) {
+				logger.warn("ASYNC: Failed to save wallet data to " + filename, e);
 			}
-			objectMapper.writeValue(jsonFile, wallet);
-			// FIXME: Seems this writes a JSON object without the closing }
-			return true;
-		} catch (Exception e) {
-			logger.warn("Failed to save wallet data to " + filename, e);
-			return false;
-		}
+		});
 	}
 
 	/**
@@ -162,17 +194,21 @@ public class WalletService implements WalletServiceInterface {
 	 *                           doesn't match (to prevent sniffing)
 	 */
 	public WalletInterface getWallet(UUID walletId, String password) throws NotFoundException {
-		WalletInterface wallet = this.wallets.get(walletId);
-		if (wallet != null) {
+		try {
+
+			WalletInterface wallet = this.getWalletUnathenticated(walletId);
 			if (passwordEncoder.matches(password, wallet.getPassword())) {
 				return wallet;
 			} else {
 				this.logger.warn("Password mismatch for wallet " + walletId
 						+ ". Throwing a NotFoundException.");
+				throw new NotFoundException("");
 			}
+		} catch (NotFoundException e) {
+			// Make sure the same error goes out for both cases to prevent sniffing
+			throw new NotFoundException(
+					"No wallet with id " + walletId + " and that password found. Please check the id and try again.");
 		}
-		throw new NotFoundException("No wallet matching that id (" + walletId
-				+ ") and password was found. Please check the id and try again.");
 	}
 
 	/**
@@ -184,6 +220,9 @@ public class WalletService implements WalletServiceInterface {
 	 */
 	public WalletInterface getWalletUnathenticated(UUID walletId) throws NotFoundException {
 		WalletInterface wallet = this.wallets.get(walletId);
+		if (wallet == null) {
+			wallet = loadWalletFromJsonFile(walletId); // also stores it for next time
+		}
 		if (wallet == null) {
 			logger.warn("No wallet with id " + walletId + " found. These are the available wallets: "
 					+ this.wallets.keySet());
@@ -206,6 +245,7 @@ public class WalletService implements WalletServiceInterface {
 		String encodedPassword = this.passwordEncoder.encode(clearTextPassword);
 		WalletInterface wallet = this.walletFactory.generateNew(encodedPassword);
 		this.wallets.put(wallet.getId(), wallet);
+		saveWalletDataToJsonFile(wallet);
 		return wallet;
 	}
 
@@ -257,15 +297,8 @@ public class WalletService implements WalletServiceInterface {
 		// Since this is just a demo and we're not taking persistence serious we save
 		// the changes async while returning the data to the user. This of course means
 		// the save can fail...
-		CompletableFuture.runAsync(() -> {
-			try {
-				ObjectMapper objectMapper = new ObjectMapper();
-				saveWalletDataToJsonFile(sourceWallet, objectMapper); // doesn't throw
-				saveWalletDataToJsonFile(destinationWallet, objectMapper); // doesn't throw
-			} catch (Exception e) {
-				logger.error("Async save of wallets to disk after transfer failed.", e);
-			}
-		});
+		saveWalletDataToJsonFile(sourceWallet); // doesn't throw
+		saveWalletDataToJsonFile(destinationWallet); // doesn't throw
 
 		return response;
 	}
