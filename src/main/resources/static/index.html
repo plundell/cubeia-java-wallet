@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Wallet API Demo</title>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			max-width: 900px;
+			margin: 0 auto;
+			padding: 20px;
+			background-color: #f9f9f9;
+		}
+
+		.card {
+			border: 1px solid #ddd;
+			border-radius: 8px;
+			padding: 25px;
+			margin-bottom: 25px;
+			background-color: #fff;
+			box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+		}
+
+		.card h2 {
+			margin-top: 0;
+			color: #333;
+			border-bottom: 2px solid #eee;
+			padding-bottom: 10px;
+			margin-bottom: 20px;
+		}
+
+		button {
+			background-color: #007bff;
+			border: none;
+			color: white;
+			padding: 12px 18px;
+			text-align: center;
+			text-decoration: none;
+			display: inline-block;
+			font-size: 16px;
+			margin: 5px 2px;
+			cursor: pointer;
+			border-radius: 6px;
+			transition: background-color 0.3s ease;
+		}
+
+		button:hover {
+			background-color: #0056b3;
+		}
+
+		button:disabled {
+			background-color: #ccc;
+			cursor: not-allowed;
+		}
+
+		input[type="text"],
+		input[type="password"],
+		input[type="number"] {
+			padding: 10px;
+			margin: 5px 0 15px 0;
+			border: 1px solid #ccc;
+			border-radius: 4px;
+			box-sizing: border-box;
+			width: calc(100% - 22px);
+			font-size: 16px;
+		}
+
+		pre {
+			background-color: #e9ecef;
+			padding: 15px;
+			border-radius: 4px;
+			overflow-x: auto;
+			font-size: 0.9em;
+			border: 1px solid #ced4da;
+		}
+
+		.token-status {
+			padding: 10px;
+			margin-bottom: 20px;
+			border-radius: 4px;
+			text-align: center;
+			font-weight: bold;
+		}
+
+		.token-present {
+			background-color: #d4edda;
+			color: #155724;
+			border: 1px solid #c3e6cb;
+		}
+
+		.token-absent {
+			background-color: #f8d7da;
+			color: #721c24;
+			border: 1px solid #f5c6cb;
+		}
+
+		.protected-section {
+			opacity: 0.5;
+			pointer-events: none;
+		}
+
+		.protected-section.active {
+			opacity: 1;
+			pointer-events: auto;
+		}
+
+		.endpoint-section {
+			margin-bottom: 20px;
+		}
+	</style>
+</head>
+
+<body>
+	<h1>Wallet API Demo</h1>
+
+	<div class="card">
+		<h2>API Token Status</h2>
+		<div id="tokenStatus" class="token-status token-absent">No Authorization Token Present</div>
+		<pre id="jwtTokenDisplay">JWT Token will appear here...</pre>
+		<p>The JWT token is obtained by creating a new wallet or accessing an existing one. It must be sent in the
+			<code>Authorization: Bearer &lt;token&gt;</code> header for protected endpoints.
+		</p>
+	</div>
+
+	<div class="card">
+		<h2>1. Public API Endpoints</h2>
+
+		<div class="endpoint-section">
+			<h3>1.1 Create a New Wallet</h3>
+			<p>This will create a new wallet and return a JWT token.</p>
+			<input type="password" id="createPasswordInput" placeholder="Enter password for new wallet">
+			<button id="createWalletBtn">Create Wallet</button>
+			<pre id="createWalletResult">Results will appear here...</pre>
+		</div>
+
+		<div class="endpoint-section">
+			<h3>1.2 Access Existing Wallet</h3>
+			<p>Get a JWT token for an existing wallet.</p>
+			<input type="text" id="accessWalletIdInput" placeholder="Enter existing Wallet ID">
+			<input type="password" id="accessPasswordInput" placeholder="Enter password for existing wallet">
+			<button id="accessWalletBtn">Access Wallet</button>
+			<pre id="accessWalletResult">Results will appear here...</pre>
+		</div>
+
+		<div class="endpoint-section">
+			<h3>1.3 View Public API Documentation</h3>
+			<button id="viewPublicHelpBtn">View Public API Help</button>
+			<pre id="publicHelpResult">Results will appear here...</pre>
+		</div>
+	</div>
+
+	<div id="protectedEndpointsContainer" class="card protected-section">
+		<h2>2. Protected API Endpoints</h2>
+		<p>These endpoints require an Authorization Token. Create or access a wallet to enable them.</p>
+
+		<div class="endpoint-section">
+			<h3>2.1 View Protected API Documentation</h3>
+			<button id="viewProtectedHelpBtn">View Protected API Help</button>
+			<pre id="protectedHelpResult">Results will appear here...</pre>
+		</div>
+
+		<div class="endpoint-section">
+			<h3>2.2 Check Wallet Balance</h3>
+			<button id="checkBalanceBtn">Check Balance</button>
+			<pre id="balanceResult">Results will appear here...</pre>
+		</div>
+
+		<div class="endpoint-section">
+			<h3>2.3 View Wallet Transactions</h3>
+			<button id="viewTransactionsBtn">View Transactions</button>
+			<pre id="transactionsResult">Results will appear here...</pre>
+		</div>
+
+		<div class="endpoint-section">
+			<h3>2.4 Deposit Funds</h3>
+			<input type="number" id="depositAmountInput" placeholder="Amount to deposit" step="0.01">
+			<input type="text" id="depositTokenInput" placeholder="Deposit token (if any)">
+			<button id="depositBtn">Deposit Funds</button>
+			<pre id="depositResult">Results will appear here...</pre>
+		</div>
+
+		<div class="endpoint-section">
+			<h3>2.5 Transfer Funds</h3>
+			<input type="text" id="transferDestWalletIdInput" placeholder="Destination Wallet ID">
+			<input type="number" id="transferAmountInput" placeholder="Amount to transfer" step="0.01">
+			<button id="transferBtn">Transfer Funds</button>
+			<pre id="transferResult">Results will appear here...</pre>
+		</div>
+	</div>
+
+
+	<script>
+		let jwtToken = null;
+		let currentWalletId = null;
+
+		// Function to get a cookie value by name
+		function getCookie(name) {
+			const value = `; ${document.cookie}`;
+			const parts = value.split(`; ${name}=`);
+			if (parts.length === 2) return parts.pop().split(';').shift();
+			return null;
+		}
+
+		function updateTokenStatus() {
+			const tokenStatusDiv = document.getElementById('tokenStatus');
+			const jwtDisplay = document.getElementById('jwtTokenDisplay');
+			const protectedContainer = document.getElementById('protectedEndpointsContainer');
+
+			if (jwtToken) {
+				tokenStatusDiv.textContent = 'Authorization Token Present!';
+				tokenStatusDiv.className = 'token-status token-present';
+				jwtDisplay.textContent = `Current JWT: ${jwtToken}
+Current Wallet ID: ${currentWalletId}`;
+				protectedContainer.classList.add('active');
+			} else {
+				tokenStatusDiv.textContent = 'No Authorization Token Present';
+				tokenStatusDiv.className = 'token-status token-absent';
+				jwtDisplay.textContent = 'JWT Token will appear here...';
+				protectedContainer.classList.remove('active');
+			}
+		}
+
+		async function apiCall(method, url, body = null, needsAuth = false, isTextResponse = false) {
+			const csrfToken = getCookie('XSRF-TOKEN'); // Assuming CSRF is still used for POST/PUT if not via JWT routes
+			const headers = {
+				'Content-Type': 'application/json'
+			};
+
+			if (csrfToken) { // Still send CSRF for relevant requests, Spring Security might require it for non-GET
+				headers['X-XSRF-TOKEN'] = csrfToken;
+			}
+
+			if (needsAuth) {
+				if (!jwtToken) {
+					return { error: "Authorization token is missing." };
+				}
+				headers['Authorization'] = `Bearer ${jwtToken}`;
+			}
+
+			try {
+				const config = {
+					method: method,
+					headers: headers,
+					credentials: 'include' // Important for cookies like XSRF-TOKEN if still used
+				};
+				if (body) {
+					config.body = JSON.stringify(body);
+				}
+				const response = await fetch(url, config);
+
+				// Update CSRF token display from cookie after each request
+				// This was in the original file, but it's better to call it specifically after POST/PUT that set cookies if needed.
+				// For now, let's assume create/access wallet might refresh it if the server is configured to do so.
+				// No explicit call to updateCsrfTokenDisplay() here, as JWT is primary auth.
+
+				if (!response.ok) {
+					let errorData;
+					try {
+						errorData = await response.json();
+					} catch (e) {
+						errorData = { message: await response.text() || `HTTP error! status: ${response.status}` };
+					}
+					console.error('API Error Response:', errorData);
+					return { error: `API Error: ${errorData.message || JSON.stringify(errorData)} (Status: ${response.status})` };
+				}
+				return isTextResponse ? await response.text() : await response.json();
+			} catch (error) {
+				console.error('Fetch/Network Error:', error);
+				return { error: `Network/Request Error: ${error.message}` };
+			}
+		}
+
+		function displayResult(elementId, data) {
+			const resultElement = document.getElementById(elementId);
+			if (data && data.error) {
+				resultElement.textContent = `Error: ${data.error}`;
+				resultElement.style.color = 'red';
+			} else if (typeof data === 'string') {
+				resultElement.textContent = data;
+				resultElement.style.color = 'black';
+			} else {
+				resultElement.textContent = JSON.stringify(data, null, 2);
+				resultElement.style.color = 'black';
+			}
+		}
+
+		// Initialize
+		document.addEventListener('DOMContentLoaded', () => {
+			updateTokenStatus(); // Initial status check
+		});
+
+		// ---- Public Endpoints ----
+
+		// Create Wallet
+		document.getElementById('createWalletBtn').addEventListener('click', async () => {
+			const password = document.getElementById('createPasswordInput').value;
+			if (!password) {
+				displayResult('createWalletResult', { error: "Password is required." });
+				return;
+			}
+			const result = await apiCall('POST', '/api/wallet/v1/public/create', { password });
+			displayResult('createWalletResult', result);
+			if (result && result.token && result.walletId) {
+				jwtToken = result.token;
+				currentWalletId = result.walletId;
+				updateTokenStatus();
+				// Optionally auto-fill access wallet ID input
+				document.getElementById('accessWalletIdInput').value = result.walletId;
+			} else {
+				jwtToken = null;
+				currentWalletId = null;
+				updateTokenStatus();
+			}
+		});
+
+		// Access Wallet
+		document.getElementById('accessWalletBtn').addEventListener('click', async () => {
+			const walletId = document.getElementById('accessWalletIdInput').value;
+			const password = document.getElementById('accessPasswordInput').value;
+			if (!walletId || !password) {
+				displayResult('accessWalletResult', { error: "Wallet ID and Password are required." });
+				return;
+			}
+			const result = await apiCall('PUT', '/api/wallet/v1/public/access', { walletId, password });
+			displayResult('accessWalletResult', result);
+			if (result && result.token && result.walletId) {
+				jwtToken = result.token;
+				currentWalletId = result.walletId; // Store the current wallet ID
+				updateTokenStatus();
+			} else {
+				jwtToken = null;
+				currentWalletId = null;
+				updateTokenStatus();
+			}
+		});
+
+		// View Public Help
+		document.getElementById('viewPublicHelpBtn').addEventListener('click', async () => {
+			const result = await apiCall('GET', '/api/wallet/v1/public/help', null, false, true);
+			displayResult('publicHelpResult', result);
+		});
+
+		// ---- Protected Endpoints ----
+
+		// View Protected Help
+		document.getElementById('viewProtectedHelpBtn').addEventListener('click', async () => {
+			const result = await apiCall('GET', '/api/wallet/v1/protected/help', null, true, true);
+			displayResult('protectedHelpResult', result);
+		});
+
+		// Check Balance
+		document.getElementById('checkBalanceBtn').addEventListener('click', async () => {
+			// Wallet ID is implicit in the JWT for this new API structure
+			const result = await apiCall('GET', `/api/wallet/v1/protected/balance`, null, true);
+			displayResult('balanceResult', result);
+		});
+
+		// View Transactions
+		document.getElementById('viewTransactionsBtn').addEventListener('click', async () => {
+			const result = await apiCall('GET', `/api/wallet/v1/protected/transactions`, null, true);
+			displayResult('transactionsResult', result);
+		});
+
+		// Deposit Funds
+		document.getElementById('depositBtn').addEventListener('click', async () => {
+			const amount = parseFloat(document.getElementById('depositAmountInput').value);
+			const depositToken = document.getElementById('depositTokenInput').value; // This is the specific deposit token, not JWT
+
+			if (isNaN(amount) || amount <= 0) {
+				displayResult('depositResult', { error: "Valid amount is required." });
+				return;
+			}
+			// The API expects a 'token' field for deposit, which is different from JWT
+			const body = { amount, token: depositToken };
+			const result = await apiCall('POST', `/api/wallet/v1/protected/deposit`, body, true);
+			displayResult('depositResult', result);
+		});
+
+		// Transfer Funds
+		document.getElementById('transferBtn').addEventListener('click', async () => {
+			const destinationWalletId = document.getElementById('transferDestWalletIdInput').value;
+			const amount = parseFloat(document.getElementById('transferAmountInput').value);
+
+			if (!destinationWalletId) {
+				displayResult('transferResult', { error: "Destination Wallet ID is required." });
+				return;
+			}
+			if (isNaN(amount) || amount <= 0) {
+				displayResult('transferResult', { error: "Valid amount is required." });
+				return;
+			}
+			const body = { destinationWalletId, amount };
+			const result = await apiCall('POST', `/api/wallet/v1/protected/transfer`, body, true);
+			displayResult('transferResult', result);
+		});
+
+	</script>
+</body>
+
+</html>

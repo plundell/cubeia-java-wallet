@@ -47,5 +47,5 @@ Thumbs.db
 test_data/
 test_data/*.json
 *.pdf
-*.html
+
 *.code-workspace
