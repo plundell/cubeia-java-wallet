@@ -44,7 +44,7 @@ logs/
 .DS_Store
 Thumbs.db 
 
-.test_data/
+.test_data/*
 *.pdf
 *.html
 *.code-workspace

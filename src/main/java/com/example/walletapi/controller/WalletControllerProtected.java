@@ -6,6 +6,7 @@ import com.example.walletapi.dto.requests.TransferRequestDto;
 import com.example.walletapi.dto.responses.BalanceResponseDto;
 import com.example.walletapi.dto.responses.LedgerResponseDto;
 import com.example.walletapi.dto.responses.TransferResponseDto;
+import com.example.walletapi.exception.NotFoundException;
 import com.example.walletapi.exception.ServerErrorException;
 import com.example.walletapi.security.JwtUtil;
 import com.example.walletapi.service.WalletServiceInterface;
@@ -67,7 +68,7 @@ public class WalletControllerProtected {
 				POST /api/wallet/v1/deposit
 					Deposits money into a wallet.
 					Requires: JWT token in Authorization header
-					Body: { amount: BigDecimal }
+					Body: { amount: BigDecimal, token: String }
 					Returns: { walletId: UUID, balance: BigDecimal, timestamp: Long }
 
 				POST /api/wallet/v1/transfer
@@ -93,7 +94,12 @@ public class WalletControllerProtected {
 			logger.error("BUGBUG: The security filter chain failed to set a wallet ID on the security context.");
 			throw new ServerErrorException(66645);
 		}
-		return walletService.getWalletUnathenticated(walletId);
+		try {
+			return walletService.getWalletUnathenticated(walletId);
+		} catch (NotFoundException e) {
+			throw new NotFoundException("It seems you have a valid token for a Wallet which no longer exists. "
+					+ "Please contact customer service to find out why.");
+		}
 	}
 
 	/**

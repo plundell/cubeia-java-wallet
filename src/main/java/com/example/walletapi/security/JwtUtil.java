@@ -6,6 +6,8 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.http.HttpServletRequest;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -42,6 +44,8 @@ public class JwtUtil {
 	private Key getSigningKey() {
 		return Keys.hmacShaKeyFor(secret.getBytes());
 	}
+
+	private Logger logger = LoggerFactory.getLogger(this.getClass());
 
 	protected static <T> T cast(Object value, Class<T> type) throws ClassCastException {
 		try {
@@ -176,19 +180,25 @@ public class JwtUtil {
 	 * 
 	 * @param request The HTTP request
 	 * @param user    The user object to set. Can be a String or a UUID
-	 * @throws ResponseStatusException A 500 server error if the if the security
-	 *                                 context has already been set
 	 */
 	public void setAuthenticatedUser(HttpServletRequest request, Object user) throws ResponseStatusException {
-		if (SecurityContextHolder.getContext().getAuthentication() == null) {
-			UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-					user, null,
-					Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER")));
-
-			authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-			SecurityContextHolder.getContext().setAuthentication(authToken);
+		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+		if (authentication != null) {
+			if ("anonymousUser".equals(authentication.getPrincipal())) {
+				logger.info("Replacing anonymous user with authenticated user: " + user);
+			} else {
+				logger.warn("Overriding security context with new authenticated user: "
+						+ authentication.getPrincipal().toString() + " --> " + user);
+			}
 		} else {
-			throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected authentication state");
+			logger.info("Setting security context to authenticated user: " + user);
 		}
+		UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+				user, null,
+				Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER")));
+
+		authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+		SecurityContextHolder.getContext().setAuthentication(authToken);
+
 	}
 }

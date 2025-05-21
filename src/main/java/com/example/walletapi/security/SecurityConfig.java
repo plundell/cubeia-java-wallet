@@ -12,7 +12,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
-import org.springframework.security.web.access.intercept.FilterSecurityInterceptor;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -85,8 +84,14 @@ public class SecurityConfig {
 	@Order(1)
 	public SecurityFilterChain protectedApiFilterChain(HttpSecurity http) throws Exception {
 		logger.info("SecurityConfig: Configuring the PROTECTED chain...");
+		// DevNote: this doesn't solve the issue of this chain always matching...
 		// This chain only applies to paths matching this:
-		http.securityMatcher("/api/wallet/v1/protected/**"); // Specific matcher
+		// http.securityMatcher(
+		// "/api/wallet/v1/protected/balance",
+		// "/api/wallet/v1/protected/transactions",
+		// "/api/wallet/v1/protected/transfer",
+		// "/api/wallet/v1/protected/deposit"); // Specific matcher
+		http.securityMatcher("/api/wallet/v1/protected/**");
 
 		// Apply common settings
 		configureCommonHttpSecurity(http);

@@ -25,41 +25,55 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
 			throws ServletException, IOException {
 
-		// Now all endpoints require a JWT, so make sure one is set...
-		String authorizationHeader = request.getHeader("Authorization");
-		String token;
-		if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
-			token = authorizationHeader.substring(7);
-		} else {
-			throw new BadCredentialsException("No JWT found in the Authorization header");
+		// Ugly hack. Checking the uri here since it doesn't seem to matter what i do in
+		// SecurityConfig
+		String uri = request.getRequestURI();
+		if (!uri.startsWith("/api/wallet/v1/protected")) {
+			logger.warn("TODO: Fix chain matching in SecurityConfig.Authorization filter run for public endpoint "
+					+ uri + " , skipping...");
+			filterChain.doFilter(request, response);
+			return;
 		}
 
-		// ... and that is's valid (can be parsed with our secret key)...
-		JwtUtil.Jwt jwt;
-		UUID walletId;
+		logger.info("PROCESSING REQUEST FOR AUTHORIZATION...");
+
 		try {
-			jwt = jwtUtil.parseToken(token);
-			// ...and that it has a walletId which is a valid UUID.
-			walletId = jwt.getUserId(UUID.class);
-		} catch (Exception e) {
-			throw new BadCredentialsException("The JWT wasn't valid", e);
-		}
+			// Now all endpoints require a JWT, so make sure one is set...
+			String authorizationHeader = request.getHeader("Authorization");
+			String token;
+			if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+				token = authorizationHeader.substring(7);
+			} else {
+				throw new BadCredentialsException("No JWT found in the Authorization header");
+			}
 
-		// ...and not expired
-		if (jwt.isExpired()) {
-			throw new BadCredentialsException("The JWT is expired");
-		}
+			// ... and that is's valid (can be parsed with our secret key)...
+			JwtUtil.Jwt jwt;
+			UUID walletId;
+			try {
+				jwt = jwtUtil.parseToken(token);
+				// ...and that it has a walletId which is a valid UUID.
+				walletId = jwt.getUserId(UUID.class);
+			} catch (Exception e) {
+				throw new BadCredentialsException("The JWT wasn't valid", e);
+			}
 
-		// OK, it's a valid JWT, let's store the walletId as the security context user
-		// so we can use it in the controller
-		if (SecurityContextHolder.getContext().getAuthentication() == null) {
+			// ...and not expired
+			if (jwt.isExpired()) {
+				throw new BadCredentialsException("The JWT is expired");
+			}
+
+			// OK, it's a valid JWT, let's store the walletId as the security context user
+			// so we can use it in the controller
 			jwtUtil.setAuthenticatedUser(request, walletId);
-		} else {
-			throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-					"Unexpected authentication state: Authentication already present.");
-		}
 
-		// Continue to the next filter (and eventually hit the controller...)
-		filterChain.doFilter(request, response);
+			logger.info("AUTHORIZATION SUCCESSFUL. CONTINUING TO THE NEXT FILTER...");
+			// Continue to the next filter (and eventually hit the controller...)
+			filterChain.doFilter(request, response);
+
+		} catch (Exception e) {
+			logger.error(e);
+			throw e;
+		}
 	}
 }

@@ -1,12 +1,7 @@
 package com.example.walletapi.controller;
 
 import com.example.walletapi.dto.requests.CreateWalletRequestDto;
-import com.example.walletapi.dto.requests.DepositRequestDto;
-import com.example.walletapi.dto.requests.TransferRequestDto;
 import com.example.walletapi.dto.requests.WalletAccessRequestDto;
-import com.example.walletapi.dto.responses.BalanceResponseDto;
-import com.example.walletapi.dto.responses.LedgerResponseDto;
-import com.example.walletapi.dto.responses.TransferResponseDto;
 import com.example.walletapi.dto.responses.WalletAccessResponseDto;
 import com.example.walletapi.security.JwtUtil;
 import com.example.walletapi.service.WalletServiceInterface;
@@ -16,7 +11,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.validation.Valid;
 import java.util.UUID;
 
 /**

@@ -143,6 +143,7 @@ public class WalletService implements WalletServiceInterface {
 				objectMapper = new ObjectMapper();
 			}
 			objectMapper.writeValue(jsonFile, wallet);
+			// FIXME: Seems this writes a JSON object without the closing }
 			return true;
 		} catch (Exception e) {
 			logger.warn("Failed to save wallet data to " + filename, e);
@@ -184,6 +185,8 @@ public class WalletService implements WalletServiceInterface {
 	public WalletInterface getWalletUnathenticated(UUID walletId) throws NotFoundException {
 		WalletInterface wallet = this.wallets.get(walletId);
 		if (wallet == null) {
+			logger.warn("No wallet with id " + walletId + " found. These are the available wallets: "
+					+ this.wallets.keySet());
 			throw new NotFoundException("No wallet with id " + walletId + " found. Please check the id and try again.");
 		}
 		return wallet;
