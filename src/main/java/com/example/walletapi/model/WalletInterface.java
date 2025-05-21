@@ -3,6 +3,7 @@ package com.example.walletapi.model;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.example.walletapi.dto.responses.BalanceResponseDto;
@@ -22,6 +23,11 @@ public interface WalletInterface extends Serializable {
 	 * AtomicReference which is how it's stored internally).
 	 */
 	BigDecimal getBalance();
+
+	/**
+	 * Get the password of the wallet.
+	 */
+	String getPassword();
 
 	/**
 	 * Get the current balance along with a timestamp when it was valid.
@@ -64,5 +70,12 @@ public interface WalletInterface extends Serializable {
 	 * @param transfer The transfer to receive.
 	 */
 	void receiveMoney(TransferInterface transfer);
+
+	public interface WalletFactoryInterface {
+		WalletInterface fromMap(Map<String, Serializable> data);
+
+		WalletInterface generateNew(String password);
+
+	}
 
 }

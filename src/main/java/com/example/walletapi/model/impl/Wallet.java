@@ -13,8 +13,11 @@ import com.example.walletapi.model.WalletInterface;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
@@ -22,6 +25,7 @@ import java.util.logging.Logger;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 /**
  * Represents a wallet which holds a balance and can initiate transfers.
@@ -50,7 +54,8 @@ public class Wallet implements WalletInterface {
 	 * The reasoning is performance, especially we want to avoid locking the ledger
 	 * for longer periods as much as possible so we can always receive money from
 	 * other wallets. While summing the ledger would be fast at first, after
-	 * thousands of transactions it could become a bottleneck.
+	 * thousands of transactions it could become a bottleneck. The balance then will
+	 * be used to "reserve funds" while a transfer is being processed.
 	 * 
 	 * The downside is possible inconsistency between balance and legder if care is
 	 * not taken.
@@ -59,59 +64,33 @@ public class Wallet implements WalletInterface {
 
 	private final ConcurrentLinkedQueue<TransferInterface> ledger = new ConcurrentLinkedQueue<>();
 
-	@Autowired
-	private TransferFactoryInterface transferFactory;
+	private final TransferFactoryInterface transferFactory;
 
 	/**
-	 * Constructs a wallet from a map of data. Suitable for deserialization.
+	 * Protected constructor used by the WalletFactory
 	 * 
-	 * NOTE: We ignore balance stored in the data, and instead calculate it from the
-	 * ledger.
-	 * 
-	 * @param data The data to construct the wallet from.
-	 * @throws IllegalArgumentException if the data is invalid.
+	 * @param transferFactory The TransferFactoryInterface to be used.
+	 * @param id              The ID of the wallet.
+	 * @param password        The password of the wallet.
+	 * @param ledger          Optional for new wallets. The ledger of the wallet.
+	 *                        The balance will be calculated from this
 	 */
-	public Wallet(Map<String, Serializable> data) throws IllegalArgumentException {
-		try {
-			this.id = UUID.fromString((String) data.get("id"));
-
-			this.password = (String) data.get("password");
-			if (this.password == null) {
-				throw new IllegalArgumentException("Password is required to create a wallet");
-			}
-
-			@SuppressWarnings("unchecked")
-			List<Map<String, Serializable>> ledgerMap = (List<Map<String, Serializable>>) data.get("ledger");
-
+	protected Wallet(TransferFactoryInterface transferFactory, UUID id, String password,
+			Iterator<TransferInterface> ledger) {
+		this.transferFactory = transferFactory;
+		this.id = id;
+		this.password = password;
+		if (ledger != null) {
+			// Add all transfers to our threadsafe ledger, and sum the amounts to get our
+			// balance
 			BigDecimal _balance = BigDecimal.ZERO;
-			for (Map<String, Serializable> transferMap : ledgerMap) {
-				try {
-					TransferInterface transfer = transferFactory.fromMap(transferMap);
-					this.ledger.add(transfer);
-					_balance = _balance.add(transfer.getAmount());
-				} catch (Exception e) {
-					this.getLogger().severe("Failed to add transfer to ledger: " + e.getMessage());
-				}
+			while (ledger.hasNext()) {
+				TransferInterface transfer = ledger.next();
+				this.ledger.add(transfer);
+				_balance = _balance.add(transfer.getAmount(id)); // get the signed amount
 			}
 			this.balance.set(_balance);
-
-		} catch (Exception e) {
-			throw new IllegalArgumentException("Invalid wallet data: " + e.getMessage());
 		}
-	}
-
-	/**
-	 * Constructs a new wallet with a random ID and zero balance.
-	 * 
-	 * @param password The password of the wallet.
-	 * @throws IllegalArgumentException if the password is null or empty.
-	 */
-	public Wallet(String password) {
-		this.id = UUID.randomUUID();
-		if (password == null || password.isEmpty()) {
-			throw new IllegalArgumentException("Password is required to create a wallet");
-		}
-		this.password = password;
 	}
 
 	private Logger getLogger() {
@@ -253,7 +232,7 @@ public class Wallet implements WalletInterface {
 		// therefore creating and adding the transfers to the sending and receiving
 		// ledgers doesn't have to be atomic. However, if any of these operations
 		// fail, we need to revert what's been done so far.
-		TransferInterface transfer = transferFactory.fromSendRequest(this.id, destination.getId(), amount);
+		TransferInterface transfer = this.transferFactory.fromSendRequest(this.id, destination.getId(), amount);
 		try {
 			this.ledger.add(transfer);
 			try {
@@ -299,6 +278,52 @@ public class Wallet implements WalletInterface {
 		// getAndUpdate() instead of compareAndSet() because there is no risk
 		// of going below zero.
 		this.balance.getAndUpdate(balance -> balance.add(transfer.getAmount()));
+
+	}
+
+	@Component
+	public static class WalletFactory implements WalletFactoryInterface {
+
+		private final TransferFactoryInterface transferFactory;
+		private final Logger logger;
+
+		@Autowired
+		public WalletFactory(TransferFactoryInterface transferFactory) {
+			this.transferFactory = transferFactory;
+			this.logger = Logger.getLogger(this.getClass().getName());
+		}
+
+		@Override
+		@SuppressWarnings("unchecked")
+		public WalletInterface fromMap(Map<String, Serializable> data) {
+			try {
+				UUID id = UUID.fromString((String) data.get("id")); // throws on bad format or missing
+
+				String password = (String) data.get("password");
+				if (password == null || password.isEmpty()) {
+					throw new IllegalArgumentException("Password is required to create a wallet");
+				}
+
+				Iterator<TransferInterface> ledger = this.transferFactory.getTransferIterator(data.get("ledger"));
+				// ^only throws if the key ledger exists but is not a list. may return null.
+
+				return new Wallet(this.transferFactory, id, password, ledger);
+
+			} catch (IllegalArgumentException e) {
+				throw e;
+			} catch (Exception e) {
+				throw new IllegalArgumentException("Invalid wallet data: " + e.getMessage(), e);
+			}
+		}
+
+		@Override
+		public WalletInterface generateNew(String password) {
+			if (password == null || password.isEmpty()) {
+				throw new IllegalArgumentException("Password is required to create a wallet");
+			}
+
+			return new Wallet(this.transferFactory, UUID.randomUUID(), password, null);
+		}
 
 	}
 

@@ -4,7 +4,8 @@ import com.example.walletapi.dto.responses.BalanceResponseDto;
 import com.example.walletapi.dto.responses.TransferResponseDto;
 import com.example.walletapi.exception.InsufficientFundsException;
 import com.example.walletapi.exception.NotFoundException;
-import com.example.walletapi.model.impl.Wallet;
+import com.example.walletapi.model.WalletInterface.WalletFactoryInterface;
+import com.example.walletapi.model.WalletInterface;
 import com.example.walletapi.service.WalletServiceInterface;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,9 +16,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import jakarta.annotation.PostConstruct;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -41,9 +40,10 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class WalletService implements WalletServiceInterface {
-	private final ConcurrentMap<UUID, Wallet> wallets;
-	private final Logger logger;
-	private final BCryptPasswordEncoder passwordEncoder;
+	private final ConcurrentMap<UUID, WalletInterface> wallets = new ConcurrentHashMap<>();
+	private final Logger logger = Logger.getLogger(WalletService.class.getName());
+	private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+	private final WalletFactoryInterface walletFactory;
 
 	@Value("${bank.wallet.id:00000000-0000-0000-0000-000000000000}")
 	private UUID bankWalletId;
@@ -58,30 +58,8 @@ public class WalletService implements WalletServiceInterface {
 	private String walletDataDir;
 
 	@Autowired
-	public WalletService() {
-		this.wallets = new ConcurrentHashMap<>();
-		this.logger = Logger.getLogger(WalletService.class.getName());
-		this.passwordEncoder = new BCryptPasswordEncoder();
-	}
-
-	/**
-	 * Loads wallet data from file when the application starts
-	 */
-	// @PostConstruct // Using json files instead
-	public void loadWalletData() {
-		File file = new File(walletDataFile);
-		if (file.exists()) {
-			try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(file))) {
-				@SuppressWarnings("unchecked")
-				ConcurrentMap<UUID, Wallet> savedWallets = (ConcurrentMap<UUID, Wallet>) ois.readObject();
-				wallets.putAll(savedWallets);
-				logger.info("Loaded " + wallets.size() + " wallets from " + walletDataFile);
-			} catch (Exception e) {
-				logger.severe("Failed to load wallet data from file: " + e.getMessage());
-			}
-		} else {
-			logger.info("No wallet data file found at " + walletDataFile);
-		}
+	public WalletService(WalletFactoryInterface walletFactory) {
+		this.walletFactory = walletFactory;
 	}
 
 	@PostConstruct
@@ -105,7 +83,7 @@ public class WalletService implements WalletServiceInterface {
 						Map<String, Serializable> data = new ObjectMapper()
 								.readValue(jsonFile, new TypeReference<Map<String, Serializable>>() {
 								});
-						Wallet wallet = new Wallet(data);
+						WalletInterface wallet = this.walletFactory.fromMap(data);
 						wallets.put(wallet.getId(), wallet);
 					} catch (Exception e) {
 						logger.warning(
@@ -116,7 +94,7 @@ public class WalletService implements WalletServiceInterface {
 		}
 	}
 
-	private Wallet getBankWallet() {
+	private WalletInterface getBankWallet() {
 		try {
 			return this.getWalletUnathenticated(bankWalletId);
 		} catch (NotFoundException e) {
@@ -154,12 +132,12 @@ public class WalletService implements WalletServiceInterface {
 
 	public void saveWalletDataToJsonFiles() {
 		ObjectMapper objectMapper = new ObjectMapper();
-		for (Wallet wallet : wallets.values()) {
+		for (WalletInterface wallet : this.wallets.values()) {
 			saveWalletDataToJsonFile(wallet, objectMapper);
 		}
 	}
 
-	public boolean saveWalletDataToJsonFile(Wallet wallet, ObjectMapper objectMapper) {
+	public boolean saveWalletDataToJsonFile(WalletInterface wallet, ObjectMapper objectMapper) {
 		String filename = walletDataDir + "/" + wallet.getId().toString() + ".json";
 		File jsonFile = new File(filename);
 		try {
@@ -184,8 +162,8 @@ public class WalletService implements WalletServiceInterface {
 	 * @throws NotFoundException if the wallet doesn't exist or if the password
 	 *                           doesn't match (to prevent sniffing)
 	 */
-	public Wallet getWallet(UUID walletId, String password) throws NotFoundException {
-		Wallet wallet = this.wallets.get(walletId);
+	public WalletInterface getWallet(UUID walletId, String password) throws NotFoundException {
+		WalletInterface wallet = this.wallets.get(walletId);
 		if (wallet != null) {
 			if (passwordEncoder.matches(password, wallet.getPassword())) {
 				return wallet;
@@ -204,8 +182,8 @@ public class WalletService implements WalletServiceInterface {
 	 * @return The wallet
 	 * @throws NotFoundException if the wallet doesn't exist
 	 */
-	public Wallet getWalletUnathenticated(UUID walletId) throws NotFoundException {
-		Wallet wallet = this.wallets.get(walletId);
+	public WalletInterface getWalletUnathenticated(UUID walletId) throws NotFoundException {
+		WalletInterface wallet = this.wallets.get(walletId);
 		if (wallet == null) {
 			throw new NotFoundException("No wallet with id " + walletId + " found. Please check the id and try again.");
 		}
@@ -219,17 +197,17 @@ public class WalletService implements WalletServiceInterface {
 	 * 
 	 * @return The newly created wallet
 	 */
-	public Wallet createWallet(String clearTextPassword) {
+	public WalletInterface createWallet(String clearTextPassword) {
 		if (clearTextPassword == null || clearTextPassword.isEmpty()) {
 			throw new IllegalArgumentException("Password is required to create a wallet");
 		}
 		String encodedPassword = this.passwordEncoder.encode(clearTextPassword);
-		Wallet wallet = new Wallet(encodedPassword);
+		WalletInterface wallet = this.walletFactory.generateNew(encodedPassword);
 		this.wallets.put(wallet.getId(), wallet);
 		return wallet;
 	}
 
-	private Wallet createBankWallet() {
+	private WalletInterface createBankWallet() {
 		Map<String, Serializable> initialDeposit = new HashMap<>();
 		initialDeposit.put("id", UUID.randomUUID());
 		initialDeposit.put("sender", this.bankWalletId);
@@ -245,7 +223,7 @@ public class WalletService implements WalletServiceInterface {
 		bankWalletData.put("password", "thiswillnevermatchanything");
 		bankWalletData.put("ledger", (Serializable) bankLedger);
 
-		Wallet bankWallet = new Wallet(bankWalletData);
+		WalletInterface bankWallet = this.walletFactory.fromMap(bankWalletData);
 		this.wallets.put(bankWallet.getId(), bankWallet);
 		return bankWallet;
 	}
@@ -270,8 +248,8 @@ public class WalletService implements WalletServiceInterface {
 		if (amount.compareTo(BigDecimal.ZERO) <= 0) {
 			throw new IllegalArgumentException("Amount must be greater than zero");
 		}
-		Wallet sourceWallet = this.getWalletUnathenticated(sourceWalletId);
-		Wallet destinationWallet = this.getWalletUnathenticated(destinationWalletId);
+		WalletInterface sourceWallet = this.getWalletUnathenticated(sourceWalletId);
+		WalletInterface destinationWallet = this.getWalletUnathenticated(destinationWalletId);
 		TransferResponseDto response = sourceWallet.sendMoney(destinationWallet, amount);
 
 		// Since this is just a demo and we're not taking persistence serious we save
