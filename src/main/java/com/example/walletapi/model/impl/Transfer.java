@@ -7,7 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.stream.IntStream;
 
 import org.springframework.stereotype.Component;
@@ -22,8 +23,6 @@ import com.example.walletapi.model.TransferInterface;
  * timestamp. We make use of that in deserialization to ensure that
  * non-validated transfers fail to deserialize.
  * 
- * TODO: we need to make sure that TransferFactory.fromMap() is actually called
- * for ^ to be true. Also look at Wallet(Map)...
  */
 public class Transfer implements TransferInterface {
 	private UUID id;
@@ -86,7 +85,7 @@ public class Transfer implements TransferInterface {
 		private final Logger logger;
 
 		public TransferFactory() {
-			this.logger = Logger.getLogger(TransferFactory.class.getName());
+			this.logger = LoggerFactory.getLogger(this.getClass());
 		}
 
 		public TransferInterface fromMap(Map<String, Serializable> data) throws IllegalArgumentException {
@@ -162,7 +161,7 @@ public class Transfer implements TransferInterface {
 										.get(i); // throws if cast fails
 								return fromMap(mapItem);
 							} catch (Exception e) {
-								this.logger.warning(
+								this.logger.warn(
 										"Failed to deserialize transfer at index " + i + ": " + e.getMessage());
 								return null;
 							}

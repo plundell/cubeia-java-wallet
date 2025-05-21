@@ -2,7 +2,8 @@ package com.example.walletapi.exception;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,10 +23,10 @@ public class ControllerExceptionHandler extends ResponseEntityExceptionHandler {
 	private Logger logger;
 
 	private Logger getLogger() {
-		if (logger == null) {
-			logger = Logger.getLogger(ControllerExceptionHandler.class.getName());
+		if (this.logger == null) {
+			this.logger = LoggerFactory.getLogger(this.getClass());
 		}
-		return logger;
+		return this.logger;
 	}
 
 	// Handle all ResponseStatusException (our custom exceptions extend this)
@@ -50,7 +51,7 @@ public class ControllerExceptionHandler extends ResponseEntityExceptionHandler {
 				HttpStatus.INTERNAL_SERVER_ERROR.value(),
 				ex.getMessage(),
 				request.getDescription(false).replace("uri=", ""));
-		getLogger().severe("Uncaught exception. Replacing with a '500 Internal Server Error'. " + ex.getMessage());
+		getLogger().error("Uncaught exception. Replacing with a '500 Internal Server Error'.", ex);
 		return new ResponseEntity<>(body, HttpStatus.INTERNAL_SERVER_ERROR);
 	}
 

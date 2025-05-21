@@ -1,5 +1,7 @@
 package com.example.walletapi.security;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -40,14 +42,15 @@ public class SecurityConfig {
 	@Autowired
 	private AuthErrorResponse authErrorResponse;
 
+	private Logger logger = LoggerFactory.getLogger(this.getClass());
+
 	// Helper method to apply common configurations
 	private void configureCommonHttpSecurity(HttpSecurity http) throws Exception {
 		// First thing we do is register an excpetion handler.
 		http.addFilterBefore(exceptionHandlerFilter(), UsernamePasswordAuthenticationFilter.class);
 		// NOTE: While we don't employ username/password auth, it's possible to use
 		// UsernamePasswordAuthenticationFilter.class anyway since it's a reliable
-		// marker
-		// for "very early in the chain"...
+		// marker for "very early in the chain"...
 
 		// Enable CORS. "with defaults" means use a bean of type
 		// CorsConfigurationSource, which, incidentally, is something we've created at
@@ -81,7 +84,7 @@ public class SecurityConfig {
 	@Bean
 	@Order(1)
 	public SecurityFilterChain protectedApiFilterChain(HttpSecurity http) throws Exception {
-
+		logger.info("SecurityConfig: Configuring the PROTECTED chain...");
 		// This chain only applies to paths matching this:
 		http.securityMatcher("/api/wallet/v1/protected/**"); // Specific matcher
 
@@ -118,13 +121,14 @@ public class SecurityConfig {
 	public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
 		// No securityMatcher here, so it applies to requests not caught by earlier
 		// chains
+		logger.info("SecurityConfig: Configuring the DEFAULT chain...");
 
 		configureCommonHttpSecurity(http); // Apply common settings
 
-		http
-				.authorizeHttpRequests(auth -> auth
-						.anyRequest().permitAll() // All other requests are permitted (as per user's last change)
-				);
+		http.authorizeHttpRequests(auth -> auth
+				.anyRequest().permitAll() // All other requests are permitted (as per user's last change)
+		);
+
 		// No JWT filter here
 
 		return http.build();

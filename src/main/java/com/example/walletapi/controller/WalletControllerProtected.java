@@ -16,7 +16,8 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
 import java.util.UUID;
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * REST Controller for authenticated operations on a wallet.
@@ -28,12 +29,13 @@ public class WalletControllerProtected {
 	private final WalletServiceInterface walletService;
 	private final JwtUtil jwtUtil;
 
-	private final Logger logger = Logger.getLogger(WalletControllerProtected.class.getName());
+	private final Logger logger;
 
 	@Autowired
 	public WalletControllerProtected(WalletServiceInterface walletService, JwtUtil jwtUtil) {
 		this.walletService = walletService;
 		this.jwtUtil = jwtUtil;
+		this.logger = LoggerFactory.getLogger(this.getClass());
 	}
 
 	/**
@@ -88,7 +90,7 @@ public class WalletControllerProtected {
 	private WalletInterface getWallet() {
 		UUID walletId = jwtUtil.getAuthenticatedUser(UUID.class);
 		if (walletId == null) {
-			logger.severe("BUGBUG: The security filter chain failed to set a wallet ID on the security context.");
+			logger.error("BUGBUG: The security filter chain failed to set a wallet ID on the security context.");
 			throw new ServerErrorException(66645);
 		}
 		return walletService.getWalletUnathenticated(walletId);

@@ -13,15 +13,14 @@ import com.example.walletapi.model.WalletInterface;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,6 +42,10 @@ public class Wallet implements WalletInterface {
 
 	private final String password;
 
+	/**
+	 * The logger for the wallet. Not initialized until needed. See
+	 * {@link #getLogger()}
+	 */
 	private Logger logger;
 
 	/**
@@ -95,7 +98,7 @@ public class Wallet implements WalletInterface {
 
 	private Logger getLogger() {
 		if (this.logger == null) {
-			this.logger = Logger.getLogger(Wallet.class.getName() + ":" + this.id);
+			this.logger = LoggerFactory.getLogger(this.getClass());
 		}
 		return this.logger;
 	}
@@ -185,7 +188,7 @@ public class Wallet implements WalletInterface {
 			Thread.sleep(100);
 		} catch (InterruptedException e) {
 			String msg = "Interrupted while " + what + " for wallet " + this.id;
-			this.getLogger().severe(msg + ": " + e.getMessage());
+			this.getLogger().error(msg, e);
 			throw new ServerErrorException(msg);
 		}
 	}
@@ -239,8 +242,8 @@ public class Wallet implements WalletInterface {
 				destination.receiveMoney(transfer); // This will also validate the transfer
 			} catch (Exception e) {
 				this.getLogger()
-						.severe("Failed to add transfer to receiving ledger after having added it "
-								+ "to sender, reverting both sending ledger and balance." + e.getMessage());
+						.error("Failed to add transfer to receiving ledger after having added it "
+								+ "to sender, reverting both sending ledger and balance.", e);
 				this.ledger.remove(transfer);
 				throw new Exception("AAA");
 
@@ -248,8 +251,8 @@ public class Wallet implements WalletInterface {
 		} catch (Exception e) {
 			if (!e.getMessage().equals("AAA")) {
 				this.getLogger()
-						.severe("Failed to add transfer to ledger after having allocated money. "
-								+ "Reverting the balance." + e.getMessage());
+						.error("Failed to add transfer to ledger after having allocated money. "
+								+ "Reverting the balance.", e);
 			}
 			this.balance.getAndUpdate(b -> b.add(amount));
 			throw new ResourceConflictException(
@@ -290,14 +293,14 @@ public class Wallet implements WalletInterface {
 		@Autowired
 		public WalletFactory(TransferFactoryInterface transferFactory) {
 			this.transferFactory = transferFactory;
-			this.logger = Logger.getLogger(this.getClass().getName());
+			this.logger = LoggerFactory.getLogger(this.getClass());
 		}
 
 		@Override
-		@SuppressWarnings("unchecked")
 		public WalletInterface fromMap(Map<String, Serializable> data) {
 			try {
 				UUID id = UUID.fromString((String) data.get("id")); // throws on bad format or missing
+				this.logger.info("Creating wallet from map with ID: " + id);
 
 				String password = (String) data.get("password");
 				if (password == null || password.isEmpty()) {
@@ -321,8 +324,9 @@ public class Wallet implements WalletInterface {
 			if (password == null || password.isEmpty()) {
 				throw new IllegalArgumentException("Password is required to create a wallet");
 			}
-
-			return new Wallet(this.transferFactory, UUID.randomUUID(), password, null);
+			UUID id = UUID.randomUUID();
+			this.logger.info("Creating new wallet with ID: " + id);
+			return new Wallet(this.transferFactory, id, password, null);
 		}
 
 	}

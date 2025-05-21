@@ -22,7 +22,6 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 
 import java.util.concurrent.ConcurrentMap;
-import java.util.logging.Logger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,6 +29,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,7 +42,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class WalletService implements WalletServiceInterface {
 	private final ConcurrentMap<UUID, WalletInterface> wallets = new ConcurrentHashMap<>();
-	private final Logger logger = Logger.getLogger(WalletService.class.getName());
+	private final Logger logger = LoggerFactory.getLogger(this.getClass());
 	private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 	private final WalletFactoryInterface walletFactory;
 
@@ -70,7 +71,7 @@ public class WalletService implements WalletServiceInterface {
 			try {
 				dataDir.mkdirs();
 			} catch (Exception e) {
-				logger.warning("Failed to create wallet data directory. Nothing will be stored. " + e.getMessage());
+				logger.warn("Failed to create wallet data directory. Nothing will be stored.", e);
 			}
 		} else {
 			File[] jsonFiles = dataDir.listFiles((dir, name) -> name.endsWith(".json"));
@@ -86,8 +87,7 @@ public class WalletService implements WalletServiceInterface {
 						WalletInterface wallet = this.walletFactory.fromMap(data);
 						wallets.put(wallet.getId(), wallet);
 					} catch (Exception e) {
-						logger.warning(
-								"Failed to load wallet data from file " + jsonFile.getName() + ": " + e.getMessage());
+						logger.warn("Failed to load wallet data from file " + jsonFile.getName(), e);
 					}
 				}
 			}
@@ -113,23 +113,13 @@ public class WalletService implements WalletServiceInterface {
 	public void registerShutdownHook() {
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 			logger.info("Shutdown hook triggered, saving wallet data...");
-			saveWalletData();
+			saveWalletDataToJsonFiles();
 		}));
 	}
 
 	/**
-	 * Saves wallet data to file when the application shuts down
+	 * Saves all wallets' data to individual JSON files.
 	 */
-	// @EventListener(ContextClosedEvent.class) // Using json files instead
-	public void saveWalletData() {
-		try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(walletDataFile))) {
-			oos.writeObject(wallets);
-			logger.info("Saved " + wallets.size() + " wallets to " + walletDataFile);
-		} catch (Exception e) {
-			logger.severe("Failed to save wallet data to file: " + e.getMessage());
-		}
-	}
-
 	public void saveWalletDataToJsonFiles() {
 		ObjectMapper objectMapper = new ObjectMapper();
 		for (WalletInterface wallet : this.wallets.values()) {
@@ -137,17 +127,25 @@ public class WalletService implements WalletServiceInterface {
 		}
 	}
 
+	/**
+	 * Saves a wallet's data to a JSON file.
+	 * 
+	 * @param wallet       The wallet to save
+	 * @param objectMapper The ObjectMapper to use
+	 * @return True if the save was successful, false otherwise
+	 */
 	public boolean saveWalletDataToJsonFile(WalletInterface wallet, ObjectMapper objectMapper) {
-		String filename = walletDataDir + "/" + wallet.getId().toString() + ".json";
-		File jsonFile = new File(filename);
+		String filename = walletDataDir + "/????.json";
 		try {
+			filename = walletDataDir + "/" + wallet.getId().toString() + ".json";
+			File jsonFile = new File(filename);
 			if (objectMapper == null) {
 				objectMapper = new ObjectMapper();
 			}
 			objectMapper.writeValue(jsonFile, wallet);
 			return true;
 		} catch (Exception e) {
-			logger.warning("Failed to save wallet data to " + filename + ": " + e.getMessage());
+			logger.warn("Failed to save wallet data to " + filename, e);
 			return false;
 		}
 	}
@@ -168,7 +166,8 @@ public class WalletService implements WalletServiceInterface {
 			if (passwordEncoder.matches(password, wallet.getPassword())) {
 				return wallet;
 			} else {
-				this.logger.warning("Password mismatch for wallet " + walletId);
+				this.logger.warn("Password mismatch for wallet " + walletId
+						+ ". Throwing a NotFoundException.");
 			}
 		}
 		throw new NotFoundException("No wallet matching that id (" + walletId
@@ -258,10 +257,10 @@ public class WalletService implements WalletServiceInterface {
 		CompletableFuture.runAsync(() -> {
 			try {
 				ObjectMapper objectMapper = new ObjectMapper();
-				saveWalletDataToJsonFile(sourceWallet, objectMapper);
-				saveWalletDataToJsonFile(destinationWallet, objectMapper);
+				saveWalletDataToJsonFile(sourceWallet, objectMapper); // doesn't throw
+				saveWalletDataToJsonFile(destinationWallet, objectMapper); // doesn't throw
 			} catch (Exception e) {
-				logger.warning("Failed to save wallet data to file: " + e.getMessage());
+				logger.error("Async save of wallets to disk after transfer failed.", e);
 			}
 		});
 

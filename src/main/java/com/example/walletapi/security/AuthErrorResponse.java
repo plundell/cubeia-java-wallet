@@ -4,7 +4,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.util.logging.Level;
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.core.AuthenticationException;
@@ -30,10 +31,10 @@ public class AuthErrorResponse implements AuthenticationEntryPoint, AccessDenied
 	private Logger logger;
 
 	private Logger getLogger() {
-		if (logger == null) {
-			logger = Logger.getLogger(AuthErrorResponse.class.getName());
+		if (this.logger == null) {
+			this.logger = LoggerFactory.getLogger(this.getClass());
 		}
-		return logger;
+		return this.logger;
 	}
 
 	@Override
@@ -41,7 +42,7 @@ public class AuthErrorResponse implements AuthenticationEntryPoint, AccessDenied
 			HttpServletRequest request, HttpServletResponse response, AuthenticationException authException)
 			throws IOException, ServletException {
 		// server side logging for debug
-		getLogger().log(Level.FINE, "Handling an AuthenticationException and responding with: "
+		getLogger().warn("Handling an AuthenticationException and responding with: "
 				+ HttpServletResponse.SC_UNAUTHORIZED + " " + authException.getMessage(), authException);
 		// respond to client
 		response.sendError(HttpServletResponse.SC_UNAUTHORIZED, authException.getMessage());
@@ -52,7 +53,7 @@ public class AuthErrorResponse implements AuthenticationEntryPoint, AccessDenied
 			HttpServletRequest request, HttpServletResponse response, AccessDeniedException accessDeniedException)
 			throws IOException, ServletException {
 		// server side logging for debug
-		getLogger().log(Level.FINE, "Handling an AccessDeniedException and responding with: "
+		getLogger().warn("Handling an AccessDeniedException and responding with: "
 				+ HttpServletResponse.SC_FORBIDDEN + " " + accessDeniedException.getMessage(), accessDeniedException);
 		// respond to client
 		response.sendError(HttpServletResponse.SC_FORBIDDEN, accessDeniedException.getMessage());

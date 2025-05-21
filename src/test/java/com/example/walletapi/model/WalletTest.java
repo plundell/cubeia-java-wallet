@@ -4,9 +4,18 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.math.BigDecimal;
 import java.util.UUID;
-
+import java.io.Serializable;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.List;
+import java.util.ArrayList;
+import static org.mockito.Mockito.*;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.example.walletapi.dto.responses.BalanceResponseDto;
 import com.example.walletapi.dto.responses.LedgerResponseDto;
@@ -15,11 +24,10 @@ import com.example.walletapi.exception.InsufficientFundsException;
 import com.example.walletapi.model.impl.Wallet;
 import com.example.walletapi.model.TransferInterface;
 import com.example.walletapi.model.TransferInterface.TransferFactoryInterface;
-import static org.mockito.Mockito.*;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.test.util.ReflectionTestUtils;
+import com.example.walletapi.model.WalletInterface;
+import com.example.walletapi.model.impl.Wallet.WalletFactory;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 
 @ExtendWith(MockitoExtension.class)
 public class WalletTest {
@@ -34,77 +42,102 @@ public class WalletTest {
 	@Mock
 	private TransferInterface mockTransfer;
 
-	public static String generateTestWallet(String walletId, String password, BigDecimal balance,
-			String ledgerTransferId, String ledgerSenderId, String ledgerRecipientId,
+	private WalletFactory walletFactory;
+
+	public static Map<String, Serializable> generateTestWalletMap(String walletId, String password,
+			String ledgerTransferId, UUID ledgerSenderId, UUID ledgerRecipientId,
 			BigDecimal ledgerAmount, long ledgerTimestamp) {
-		return """
-				{
-					"id": "%s",
-					"password": "%s",
-					"balance": %s,
-					"ledger": [
-						{
-							"id": "%s",
-							"sender": "%s",
-							"recipient": "%s",
-							"amount": %s,
-							"timestamp": %d
-						}
-					]
-				}
-				""".formatted(walletId, password, balance.toPlainString(),
-				ledgerTransferId, ledgerSenderId, ledgerRecipientId,
-				ledgerAmount.toPlainString(), ledgerTimestamp);
+
+		Map<String, Serializable> ledgerEntryMap = new HashMap<>();
+		ledgerEntryMap.put("id", ledgerTransferId);
+		ledgerEntryMap.put("sender", ledgerSenderId.toString());
+		ledgerEntryMap.put("recipient", ledgerRecipientId.toString());
+		ledgerEntryMap.put("amount", ledgerAmount);
+		ledgerEntryMap.put("timestamp", ledgerTimestamp);
+
+		List<Map<String, Serializable>> ledgerList = new ArrayList<>();
+		ledgerList.add(ledgerEntryMap);
+
+		Map<String, Serializable> walletData = new HashMap<>();
+		walletData.put("id", walletId);
+		walletData.put("password", password);
+		walletData.put("ledger", (Serializable) ledgerList);
+		return walletData;
 	}
 
 	@Test
-	public void testCreateWalletFromJson() {
+	public void testCreateWalletFromMap() {
 		// Arrange
-		String testWalletId = "123e4567-e89b-12d3-a456-426614174000";
+		String testWalletIdStr = "123e4567-e89b-12d3-a456-426614174000";
+		UUID testWalletId = UUID.fromString(testWalletIdStr);
 		String testPassword = "test-password";
-		BigDecimal testBalance = new BigDecimal("500.00");
-		String testDestinationWalletId = "123e4567-e89b-12d3-a456-426614174001"; // Used as sender in ledger
-		String testTransferId = "123e4567-e89b-12d3-a456-426734832422";
+
+		String testLedgerTransferIdStr = "123e4567-e89b-12d3-a456-426734832422";
+		UUID testLedgerTransferId = UUID.fromString(testLedgerTransferIdStr);
+
+		UUID testLedgerSenderId = UUID.fromString("123e4567-e89b-12d3-a456-426614174001");
+		UUID testLedgerRecipientId = testWalletId;
+
 		BigDecimal testLedgerAmount = new BigDecimal("400.00");
 		long testLedgerTimestamp = 1716153600000L;
 
-		// The JSON defines 'sender' as testDestinationWalletId and 'recipient' as
-		// testWalletId for the ledger entry.
-		String jsonString = generateTestWallet(
-				testWalletId,
+		BigDecimal expectedBalance = testLedgerAmount;
+
+		Map<String, Serializable> walletMap = generateTestWalletMap(
+				testWalletIdStr,
 				testPassword,
-				testBalance,
-				testTransferId,
-				testDestinationWalletId, // This will be the 'sender' in the JSON ledger
-				testWalletId, // This will be the 'recipient' in the JSON ledger
+				testLedgerTransferIdStr,
+				testLedgerSenderId,
+				testLedgerRecipientId,
 				testLedgerAmount,
 				testLedgerTimestamp);
 
+		// Mock the behavior of the TransferFactory and the Transfer object it creates
+		// This setup is crucial for the Wallet constructor to correctly process the
+		// ledger.
+		when(mockTransferFactory.fromMap(anyMap())).thenReturn(mockTransfer);
+		when(mockTransfer.getId()).thenReturn(testLedgerTransferId);
+		when(mockTransfer.getSender()).thenReturn(testLedgerSenderId);
+		when(mockTransfer.getRecipient()).thenReturn(testLedgerRecipientId);
+		when(mockTransfer.getAmount()).thenReturn(testLedgerAmount);
+		when(mockTransfer.getTimestamp()).thenReturn(testLedgerTimestamp);
+
 		// Act
-		Wallet walletFromJson = new Wallet(jsonString);
+		// Use the WalletFactory to create the wallet from the map
+		walletFactory = new WalletFactory(mockTransferFactory);
+		WalletInterface walletFromMap = walletFactory.fromMap(walletMap);
 
 		// Assert
-		assertNotNull(walletFromJson);
-		assertEquals(UUID.fromString(testWalletId), walletFromJson.getId());
-		assertEquals(testPassword, walletFromJson.getPassword());
-		assertEquals(testBalance, walletFromJson.getBalance());
-		assertEquals(1, walletFromJson.getLedger().size());
-		assertEquals(testTransferId, walletFromJson.getLedger().get(0).getId().toString());
-		// The original assertions are maintained. If
-		// Wallet.getLedger().get(0).getRecipient()
-		// and .getSender() seem swapped, it's preserving original test's expectation.
-		assertEquals(testDestinationWalletId, walletFromJson.getLedger().get(0).getRecipient().toString());
-		assertEquals(testWalletId, walletFromJson.getLedger().get(0).getSender().toString());
-		assertEquals(testLedgerAmount, walletFromJson.getLedger().get(0).getAmount());
-		assertEquals(testLedgerTimestamp, walletFromJson.getLedger().get(0).getTimestamp());
+		assertNotNull(walletFromMap);
+		assertEquals(testWalletId, walletFromMap.getId());
+		assertEquals(testPassword, walletFromMap.getPassword());
+		assertEquals(expectedBalance, walletFromMap.getBalance());
+
+		assertNotNull(walletFromMap.getLedger());
+		assertEquals(1, walletFromMap.getLedger().size());
+
+		TransferInterface actualLedgerEntry = walletFromMap.getLedger().get(0);
+		assertNotNull(actualLedgerEntry);
+
+		assertEquals(testLedgerTransferId, actualLedgerEntry.getId());
+		assertEquals(testLedgerSenderId, actualLedgerEntry.getSender());
+		assertEquals(testLedgerRecipientId, actualLedgerEntry.getRecipient());
+		assertEquals(testLedgerAmount, actualLedgerEntry.getAmount());
+		assertEquals(testLedgerTimestamp, actualLedgerEntry.getTimestamp());
 	}
 
 	@BeforeEach
 	public void setUp() {
-		wallet = new Wallet("test-password");
-		destinationWallet = new Wallet("test-password");
-		ReflectionTestUtils.setField(wallet, "transferFactory", mockTransferFactory);
-		ReflectionTestUtils.setField(destinationWallet, "transferFactory", mockTransferFactory);
+		// Ensure wallet and destinationWallet in setUp also use the constructor that
+		// accepts a factory
+		walletFactory = new WalletFactory(mockTransferFactory);
+		wallet = (Wallet) walletFactory.generateNew("test-password");
+		destinationWallet = (Wallet) walletFactory.generateNew("test-password-dest");
+		// ReflectionTestUtils are no longer needed for setting transferFactory if
+		// constructors handle it.
+		// ReflectionTestUtils.setField(wallet, "transferFactory", mockTransferFactory);
+		// ReflectionTestUtils.setField(destinationWallet, "transferFactory",
+		// mockTransferFactory);
 	}
 
 	@Test

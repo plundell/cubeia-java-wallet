@@ -15,7 +15,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.util.logging.Level;
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Handles exceptions thrown by Spring Boot filters before the controllers are
@@ -37,10 +38,10 @@ public class FilterChainExceptionHandler extends OncePerRequestFilter {
 	private Logger logger;
 
 	private Logger getLogger() {
-		if (logger == null) {
-			logger = Logger.getLogger(FilterChainExceptionHandler.class.getName());
+		if (this.logger == null) {
+			this.logger = LoggerFactory.getLogger(this.getClass());
 		}
-		return logger;
+		return this.logger;
 	}
 
 	@Override
@@ -50,18 +51,19 @@ public class FilterChainExceptionHandler extends OncePerRequestFilter {
 		// Wrap the remainder of the chain in a try-block so we can handle all the
 		// exceptions....
 		try {
+			getLogger().info("FilterChainExceptionHandler: PASSING REQUEST DOWN THE CHAIN...");
 			filterChain.doFilter(request, response);
 
 		} catch (ResponseStatusException ex) {
 			// These are the errors this filter is expected to catch...
-			getLogger().log(Level.INFO, "Correctly caught " + ex.getClass().getName() + ". Responding with " + ex
+			getLogger().info("Correctly caught " + ex.getClass().getName() + ". Responding with " + ex
 					.getStatusCode().value() + " to user. The actual error reads:" + ex.getMessage(), ex);
 			setErrorResponse(response, ex.getStatusCode().value(), ex.getReason(), request.getRequestURI());
 			return;
 
 		} catch (AuthenticationException | AccessDeniedException ex) {
 			// These errors are meant to be handled by security.AuthErrorResponse
-			getLogger().log(Level.SEVERE, "BUGBUG: Caught a " + ex.getClass().getName()
+			getLogger().error("BUGBUG: Caught a " + ex.getClass().getName()
 					+ ", these should already have been handled by security.AuthErrorResponse. You may"
 					+ "have registered this filter in the wrong place. Rethrowing the error hoping it "
 					+ "will be caught by the next filter in the chain...");
@@ -70,7 +72,7 @@ public class FilterChainExceptionHandler extends OncePerRequestFilter {
 		} catch (Exception ex) {
 			// These are unexpected errors which shouldn't happen, but this filter is still
 			// meant too catch them...
-			getLogger().log(Level.SEVERE,
+			getLogger().error(
 					"Uncaught error in filter chain. Returning 500 to user. The error reads:" + ex.getMessage(), ex);
 			// Send a generic 500 error response to the client
 			setErrorResponse(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
@@ -92,7 +94,7 @@ public class FilterChainExceptionHandler extends OncePerRequestFilter {
 		try {
 			objectMapper.writeValue(response.getOutputStream(), errorDetails);
 		} catch (IOException e) {
-			getLogger().log(Level.SEVERE, "Failed to write error response to output stream", e);
+			getLogger().error("Failed to write error response to output stream", e);
 		}
 	}
 
